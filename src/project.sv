@@ -3,6 +3,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+`define HORIZONTAL_TOTAL         10'd800
+`define VERTICAL_TOTAL           10'd525
+
+`define HORIZONTAL_FRONT_PORCH   10'd16
+`define HORIZONTAL_BACK_PORCH    10'd48
+`define HORIZONTAL_SYNC          10'd96
+
+`define VERTICAL_FRONT_PORCH     10'd10
+`define VERTICAL_BACK_PORCH      10'd33
+`define VERTICAL_SYNC            10'd2
+
 `default_nettype none
 
 module tt_um_maxele (
@@ -29,13 +40,13 @@ module tt_um_maxele (
 
 	logic [31:0] lx, ly;
 
-	always_ff @(posedge clk_i or posedge rst_i) begin
-		if (rst_i) begin
+	always_ff @(posedge clk or posedge rst_n) begin
+		if (rst_n) begin
 			x_p <= 0;
 			y_p <= 0;
-			foreach(matrix_p[i])
-				foreach(matrix_p[i][j])
-					matrix_p[i][j] <= 0;
+			foreach(matrix_n[i, j]) begin
+				matrix_p[i][j] <= 0;
+			end
 			matrix_p[0][0] <= 1;
 			matrix_p[0][1] <= 1;
 			matrix_p[0][9] <= 1;
@@ -45,9 +56,9 @@ module tt_um_maxele (
 		end else begin
 			x_p <= x_n;
 			y_p <= y_n;
-			foreach(matrix_p[i])
-				foreach(matrix_p[i][j])
-					matrix_p[i][j] <= matrix_n[i][j];
+			foreach(matrix_n[i, j]) begin
+				matrix_p[i][j] <= matrix_n[i][j];
+			end
 		end
 	end
 
@@ -58,9 +69,9 @@ module tt_um_maxele (
 		g_n = 2'b00;
 		b_n = 2'b00;
 		sync_n = 1;
-		foreach(matrix_n[i])
-			foreach(matrix_n[i][j])
-				matrix_n[i][j] = matrix_p[i][j];
+		foreach(matrix_n[i, j]) begin
+			matrix_n[i][j] = matrix_p[i][j];
+		end
 		lx = 0;
 		ly = 0;
 	
@@ -108,14 +119,9 @@ module tt_um_maxele (
 	end
 
 	
-	assign r_o = r_n;
-	assign g_o = g_n;
-	assign b_o = b_n;
-	assign sync_o = sync_n;
-
 	// All output pins must be assigned. If not used, assign to 0.
 	assign uo_out  = 0;
-	assign uio_out = (r_n, g_n, b_n, 2'b0);
+	assign uio_out = {r_n, g_n, b_n, sync_n, 1'b0};
 	assign uio_oe  = 0;
 
 	// List all unused inputs to prevent warnings
