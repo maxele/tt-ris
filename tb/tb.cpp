@@ -1,4 +1,4 @@
-#include "Vmain.h"
+#include "Vtt_um_maxele.h"
 #include "verilated.h"
 #include "verilated_vcd_c.h"
 
@@ -13,10 +13,23 @@ double sc_time_stamp() { return main_time; }
 
 Uint8 pixels[VGA_W*VGA_H][4];
 
+char gamepad_simulator(const bool *key_states, int len) {
+	char ret = 0;
+	ret = ret | 0b00000001 * key_states[SDL_SCANCODE_J]; // uio[0] - right
+	ret = ret | 0b00000010 * key_states[SDL_SCANCODE_K]; // uio[1] - left
+	ret = ret | 0b00000100 * key_states[SDL_SCANCODE_L]; // uio[2] - down
+	ret = ret | 0b00001000 * key_states[SDL_SCANCODE_SPACE]; // uio[3] - up
+	ret = ret | 0b00010000 * key_states[SDL_SCANCODE_D]; // uio[4] - A
+	ret = ret | 0b00100000 * key_states[SDL_SCANCODE_W]; // uio[5] - B
+	ret = ret | 0b01000000 * key_states[SDL_SCANCODE_R]; // uio[6] - X
+	ret = ret | 0b10000000 * key_states[SDL_SCANCODE_R]; // uio[7] - Y
+	return ret;
+}
+
 int main(int argc, char **argv) {
 	// Verilator {{{
 	Verilated::commandArgs(argc, argv);
-	Vmain *top = new Vmain;
+	Vtt_um_maxele *top = new Vtt_um_maxele;
 
 	// tracing
 	Verilated::traceEverOn(true);
@@ -50,14 +63,14 @@ int main(int argc, char **argv) {
 	std::cout << "- Resetting DUT..." << std::endl;
 
 	// Apply reset for the first 20 ns
-	top->rst_i = 1;
+	top->rst_n = 1;
 	for (int i = 0; i < 4; ++i) {
 		contextp->timeInc(1);
-		top->clk_i = 0; top->eval(); tfp->dump(contextp->time()); main_time += half_period;
+		top->clk = 0; top->eval(); tfp->dump(contextp->time()); main_time += half_period;
 		contextp->timeInc(1);
-		top->clk_i = 1; top->eval(); tfp->dump(contextp->time()); main_time += half_period;
+		top->clk = 1; top->eval(); tfp->dump(contextp->time()); main_time += half_period;
 	}
-	top->rst_i = 0;
+	top->rst_n = 0;
 
 	std::cout << "- Start simulation..." << std::endl;
 	std::cout << "_____________________________________________________________" << std::endl;
@@ -85,13 +98,17 @@ int main(int argc, char **argv) {
 		const int max_cycles = VGA_W*VGA_H;
 		//const int max_cycles = VGA_W;
 		for (int cycle = 0; cycle < max_cycles; ++cycle) {
+			int len;
+			top->uio_in = gamepad_simulator(SDL_GetKeyboardState(&len), len);
+			// std::cout << std::bitset<8>(top->uio_in) << std::endl;
 			contextp->timeInc(1);
-			top->clk_i = 0; top->eval(); tfp->dump(contextp->time()); main_time += half_period;
+			top->clk = 0; top->eval(); tfp->dump(contextp->time()); main_time += half_period;
 			contextp->timeInc(1);
-			top->clk_i = 1; top->eval(); tfp->dump(contextp->time()); main_time += half_period;
-			pixels[vga_buf_position][3] = top->r_o * (float)255/3;
-			pixels[vga_buf_position][2] = top->g_o * (float)255/3;
-			pixels[vga_buf_position][1] = top->b_o * (float)255/3;
+			top->clk = 1; top->eval(); tfp->dump(contextp->time()); main_time += half_period;
+			char uo = top->uo_out;
+			pixels[vga_buf_position][3] = ((uo >> 6) & 0b11) * (float)255/3;
+			pixels[vga_buf_position][2] = ((uo >> 4) & 0b11) * (float)255/3;
+			pixels[vga_buf_position][1] = ((uo >> 2) & 0b11) * (float)255/3;
 			pixels[vga_buf_position][0] = 255;
 			//std::cout << (int)top->r_o << " : " << (int)top->g_o << " : " << (int)top->b_o << std::endl;
 			//std::cout << (int)pixels[vga_buf_position][0] << " : " << (int)pixels[vga_buf_position][1] << " : " << (int)pixels[vga_buf_position][2] << " : " << (int)pixels[vga_buf_position][3] << std::endl;
@@ -99,7 +116,7 @@ int main(int argc, char **argv) {
 		}
 		/*SDL_SetRenderDrawColor(renderer, 0, 0, 0, 1);
 		  SDL_RenderClear(renderer);*/
-		SDL_Delay(10);
+		//SDL_Delay(1000);
 		SDL_UpdateTexture(texture, NULL, pixels, VGA_W*sizeof(4));
 		SDL_RenderFillRect(renderer, &r);
 		SDL_RenderTexture(renderer, texture, NULL, &r);
